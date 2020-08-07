@@ -59,4 +59,13 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-livedata-ktx:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-common-java8:$lifecycle_version"
+
+    // ARCore Location Library
+    implementation 'com.github.appoly:ARCore-Location:1.2'
+
+    // Sockets
+    implementation 'com.neovisionaries:nv-websocket-client:2.9'
+
+    // Java Objects into their JSON representation
+    implementation 'com.google.code.gson:gson:2.8.6'
 }

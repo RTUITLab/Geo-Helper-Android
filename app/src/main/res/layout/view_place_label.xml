@@ -1,12 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/labelTV"
-    android:layout_width="wrap_content"
+    android:id="@+id/placeContainer"
+    android:layout_width="150dp"
     android:layout_height="wrap_content"
     android:background="@drawable/ic_launcher_background"
-    android:gravity="center"
-    android:padding="16dp"
-    style="@style/TextAppearance.AppCompat.Headline"
-    tools:text="Hello" />
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/nameTV"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:layout_gravity="center_horizontal"
+        android:padding="8dp"
+        style="@style/TextAppearance.AppCompat.Headline"
+        tools:text="Name" />
+
+    <TextView
+        android:id="@+id/distanceTV"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:layout_gravity="center_horizontal"
+        android:padding="8dp"
+        android:textSize="24sp"
+        tools:text="Name" />
+
+</LinearLayout>
