@@ -1,4 +1,4 @@
-package com.rtuitlab.geohelper
+package com.rtuitlab.geohelper.azimuth
 
 import android.hardware.Sensor
 import android.hardware.SensorEvent
