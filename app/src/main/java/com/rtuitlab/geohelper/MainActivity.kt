@@ -2,38 +2,33 @@ package com.rtuitlab.geohelper
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.Bundle
 import android.util.Log
-import android.widget.TextView
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
-import com.google.android.gms.location.LocationServices
-import com.google.ar.core.Pose
+import com.google.ar.core.*
 import com.google.ar.sceneform.AnchorNode
+import com.google.ar.sceneform.FrameTime
 import com.google.ar.sceneform.Scene
-import com.google.ar.sceneform.math.Quaternion
 import com.google.ar.sceneform.math.Vector3
 import com.google.ar.sceneform.rendering.ViewRenderable
 import com.google.ar.sceneform.ux.ArFragment
-import com.rtuitlab.geohelper.azimuth.AzimuthManager
-import com.rtuitlab.geohelper.models.LatLng
+import com.google.ar.sceneform.ux.TransformableNode
 import com.rtuitlab.geohelper.models.LocationData
-import com.rtuitlab.geohelper.models.Place
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.view_place_label.view.*
-import java.lang.Exception
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
 
 	companion object {
 		const val LOG_TAG = "GeoHelperLogs"
@@ -41,6 +36,14 @@ class MainActivity : AppCompatActivity() {
 
 	private val arFragment by lazy {
 		supportFragmentManager.findFragmentById(R.id.arFragment) as ArFragment
+	}
+
+	private val frame: Frame? by lazy {
+		arFragment.arSceneView.arFrame
+	}
+
+	private val scene: Scene by lazy {
+		arFragment.arSceneView.scene
 	}
 
 	private val viewModel: MainViewModel by lazy {
@@ -52,6 +55,7 @@ class MainActivity : AppCompatActivity() {
 		setContentView(R.layout.activity_main)
 
 		setupLocationListener()
+		arFragment.arSceneView.scene.addOnUpdateListener(this)
 
 		viewModel.locationDataLiveData.observe(this, Observer {
 			processLocationData(it)
@@ -120,6 +124,51 @@ class MainActivity : AppCompatActivity() {
 			arFragment.arSceneView.scene.addChild(node)
 			node.worldPosition = Vector3(x, y, z)
 		}
+	}
+
+	override fun onUpdate(frameTime: FrameTime?) {
+		frame?.let {
+			for (o in it.getUpdatedTrackables(Plane::class.java)) {
+				val plane = o as Plane
+				if (plane.trackingState === TrackingState.TRACKING) {
+					arFragment.planeDiscoveryController.hide()
+					val iterableAnchor = it.updatedAnchors.iterator()
+					if (!iterableAnchor.hasNext()) {
+						makeAr(plane, it)
+					}
+				}
+			}
+		}
+	}
+
+	fun makeAr(plane: Plane, frame: Frame) {
+		for (k in 0..9) {
+			if (this.degree >= 160 && this.degree <= 170) {
+				Toast.makeText(this, "walk", Toast.LENGTH_SHORT).show()
+				val hitTest: List<HitResult> = frame.hitTest(screenCenter().x, screenCenter().y)
+				val hitTestIterator = hitTest.iterator()
+				while (hitTestIterator.hasNext()) {
+					val hitResult: HitResult = hitTestIterator.next()
+					modelAnchor = null
+					modelAnchor = plane.createAnchor(hitResult.hitPose)
+					val anchorNode =
+						AnchorNode(modelAnchor)
+					anchorNode.setParent(scene)
+					val transformableNode =
+						TransformableNode(arFragment.transformationSystem)
+					transformableNode.setParent(anchorNode)
+					transformableNode.renderable = this@MainActivity.andyRenderable
+					val x: Float = modelAnchor.getPose().tx()
+					val y: Float = modelAnchor.getPose().compose(Pose.makeTranslation(0f, 0f, 0f)).ty()
+					transformableNode.worldPosition = Vector3(x, y, (-k).toFloat())
+				}
+			}
+		}
+	}
+
+	private fun screenCenter(): Vector3 {
+		val vw: View = findViewById(android.R.id.content)
+		return Vector3(vw.width / 2f, vw.height / 2f, 0f)
 	}
 
 //	private fun addPointByXYZ(x: Float, y: Float, z: Float, name: String) {
