@@ -21,7 +21,7 @@ class MainViewModel: ViewModel() {
         }
 
     private val webSocket = WebSocketFactory()
-        .createSocket("wss://geo-helper.herokuapp.com/").apply {
+        .createSocket("wss://geo-helper.ga/api/v1/").apply {
             addListener(object : WebSocketAdapter() {
                 override fun onTextMessage(websocket: WebSocket?, text: String?) {
                     Log.wtf("hey", "RESPONSE: $text")
@@ -29,7 +29,10 @@ class MainViewModel: ViewModel() {
                         val response = Gson().fromJson(text, ServerResponse::class.java)
                         if (response.success) {
                             Log.wtf("hey", "SUCCESS RESPONSE: $response")
-                            _locationDataLiveData.postValue(response.data)
+                            val newLocationData = response.data
+                            if (newLocationData != locationDataLiveData.value) {
+                                _locationDataLiveData.postValue(newLocationData)
+                            }
                         }
                     }
                 }

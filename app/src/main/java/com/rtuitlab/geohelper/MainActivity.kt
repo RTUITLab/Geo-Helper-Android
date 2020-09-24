@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.UnavailableException
@@ -24,8 +25,11 @@ import com.rtuitlab.geohelper.AugmentedRealityLocationUtils.INVALID_MARKER_SCALE
 import com.rtuitlab.geohelper.models.Place
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.view_place_label.view.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import uk.co.appoly.arcorelocation.LocationMarker
 import uk.co.appoly.arcorelocation.LocationScene
+import uk.co.appoly.arcorelocation.sensor.DeviceLocationChanged
 import java.util.concurrent.CompletableFuture
 
 
@@ -34,10 +38,6 @@ class MainActivity : AppCompatActivity() {
 	companion object {
 		const val LOG_TAG = "GeoHelperLogs"
 	}
-
-//	private val arFragment by lazy {
-//		supportFragmentManager.findFragmentById(R.id.arFragment) as ArFragment
-//	}
 
 	private val viewModel: MainViewModel by lazy {
 		ViewModelProvider(this).get(MainViewModel::class.java)
@@ -60,10 +60,7 @@ class MainActivity : AppCompatActivity() {
 		super.onCreate(savedInstanceState)
 		setContentView(R.layout.activity_main)
 
-		setupLocationListener()
-
 		viewModel.locationDataLiveData.observe(this, Observer {
-			Log.wtf("hey", "#observe")
 			processPlaces(it)
 		})
 	}
@@ -107,8 +104,11 @@ class MainActivity : AppCompatActivity() {
 		locationScene = locationScene ?: LocationScene(this, arSceneView).apply {
 			setMinimalRefreshing(true)
 			setOffsetOverlapping(true)
-//				setRemoveOverlapping(true)
-			anchorRefreshInterval = 2000
+			anchorRefreshInterval = 10000
+			locationChangedEvent = DeviceLocationChanged {
+				viewModel.currentLocation = it
+				coordinatesHolder.text = "${it.latitude} | ${it.longitude} | ${System.currentTimeMillis()}"
+			}
 		}
 
 		try {
@@ -117,25 +117,6 @@ class MainActivity : AppCompatActivity() {
 			Toast.makeText(this, "Unable to get camera", Toast.LENGTH_LONG).show()
 			finish()
 			return
-		}
-	}
-
-	private fun setupLocationListener() {
-		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-			Log.e(LOG_TAG, "PERMISSIONS NOT GRANTED")
-			return
-		}
-		getSystemService(LocationManager::class.java)?.apply {
-			requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000, 20F, object : ChangeLocationListener() {
-				override fun onLocationChanged(location: Location?) {
-					viewModel.currentLocation = location
-					Toast.makeText(
-						this@MainActivity,
-						"Location changed",
-						Toast.LENGTH_SHORT
-					).show()
-				}
-			})
 		}
 	}
 
