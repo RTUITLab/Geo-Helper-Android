@@ -1,20 +1,19 @@
 package com.rtuitlab.geohelper
 
 import android.Manifest
+import android.content.DialogInterface
 import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.lifecycleScope
 import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.UnavailableException
@@ -25,8 +24,6 @@ import com.rtuitlab.geohelper.AugmentedRealityLocationUtils.INVALID_MARKER_SCALE
 import com.rtuitlab.geohelper.models.Place
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.view_place_label.view.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import uk.co.appoly.arcorelocation.LocationMarker
 import uk.co.appoly.arcorelocation.LocationScene
 import uk.co.appoly.arcorelocation.sensor.DeviceLocationChanged
@@ -37,6 +34,13 @@ class MainActivity : AppCompatActivity() {
 
 	companion object {
 		const val LOG_TAG = "GeoHelperLogs"
+
+		const val REQUEST_ID_MULTIPLE_PERMISSIONS = 1
+		val PERMISSIONS = arrayOf(
+			Manifest.permission.ACCESS_FINE_LOCATION,
+			Manifest.permission.CAMERA,
+			Manifest.permission.ACCESS_COARSE_LOCATION
+		)
 	}
 
 	private val viewModel: MainViewModel by lazy {
@@ -56,6 +60,8 @@ class MainActivity : AppCompatActivity() {
 		arSceneView.resume()
 	}
 
+	private var isPermissionsGranted = false
+
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 		setContentView(R.layout.activity_main)
@@ -63,16 +69,64 @@ class MainActivity : AppCompatActivity() {
 		viewModel.locationDataLiveData.observe(this, Observer {
 			processPlaces(it)
 		})
+
+		isPermissionsGranted = if (hasPermissions(*PERMISSIONS)) {
+			true
+		} else {
+			ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_ID_MULTIPLE_PERMISSIONS)
+			false
+		}
+	}
+
+	override fun onRequestPermissionsResult(
+		requestCode: Int,
+		permissions: Array<out String>,
+		grantResults: IntArray
+	) {
+		if (requestCode == REQUEST_ID_MULTIPLE_PERMISSIONS) {
+			if (grantResults.all {
+					it == PackageManager.PERMISSION_GRANTED
+				}) {
+				isPermissionsGranted = true
+			} else {
+				if (PERMISSIONS.any {
+						ActivityCompat.shouldShowRequestPermissionRationale(this, it)
+					}) {
+					showDialogOK("Camera and Location Services Permission required for this app",
+						DialogInterface.OnClickListener { _, which ->
+							when (which) {
+								DialogInterface.BUTTON_POSITIVE -> {
+									ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_ID_MULTIPLE_PERMISSIONS)
+								}
+								DialogInterface.BUTTON_NEGATIVE -> {
+									finish()
+								}
+							}
+						})
+				} else {
+					Toast.makeText(
+						this,
+						"Go to settings and enable permissions",
+						Toast.LENGTH_LONG
+					).show()
+					finish()
+				}
+			}
+		}
 	}
 
 	override fun onResume() {
 		super.onResume()
-		setupSession()
+		if (isPermissionsGranted) {
+			setupSession()
+		}
 	}
 
 	override fun onPause() {
 		super.onPause()
-		pauseARElements()
+		if (isPermissionsGranted) {
+			pauseARElements()
+		}
 	}
 
 	private fun pauseARElements() {
