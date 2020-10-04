@@ -1,4 +1,4 @@
-package com.rtuitlab.geohelper
+package com.rtuitlab.geohelper.utils
 
 import android.content.Context
 import android.content.DialogInterface
@@ -6,7 +6,7 @@ import android.content.pm.PackageManager
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 
-fun Context.hasPermissions(vararg permissions: String): Boolean = permissions.all {
+fun Context.hasPermissions(vararg permissions: String) = permissions.all {
     ActivityCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
 }
 

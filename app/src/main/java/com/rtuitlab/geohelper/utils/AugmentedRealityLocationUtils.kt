@@ -1,15 +1,17 @@
-package com.rtuitlab.geohelper
+package com.rtuitlab.geohelper.utils
 
 import android.app.Activity
+import android.content.Context
 import android.widget.Toast
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.Config
 import com.google.ar.core.Session
 import com.google.ar.core.exceptions.*
+import com.rtuitlab.geohelper.R
 
 object AugmentedRealityLocationUtils {
 
-    private const val RENDER_MARKER_MIN_DISTANCE = 2//meters
+    private const val RENDER_MARKER_MIN_DISTANCE = 1//meters
     private const val RENDER_MARKER_MAX_DISTANCE = 7000//meters
     const val INVALID_MARKER_SCALE_MODIFIER = -1F
     const val INITIAL_MARKER_SCALE_MODIFIER = 0.5f
@@ -40,13 +42,9 @@ object AugmentedRealityLocationUtils {
     fun handleSessionException(activity: Activity, sessionException: UnavailableException) {
         val message = when (sessionException) {
             is UnavailableArcoreNotInstalledException -> "arcore_not_installed"
-
             is UnavailableUserDeclinedInstallationException -> "arcore_not_installed"
-
             is UnavailableApkTooOldException -> "arcore_not_updated"
-
             is UnavailableSdkTooOldException -> "arcore_not_supported"
-
             else -> "arcore_not_supported"
         }
         Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
@@ -61,12 +59,8 @@ object AugmentedRealityLocationUtils {
             in 61..80 -> 0.65f
             in 81..100 -> 0.6f
             in 101..1000 -> 0.5f
-            in 1001..1500 -> 0.45f
-            in 1501..2000 -> 0.4f
-            in 2001..2500 -> 0.35f
-            in 2501..3000 -> 0.3f
-            in 3001..RENDER_MARKER_MAX_DISTANCE -> 0.25f
-            in RENDER_MARKER_MAX_DISTANCE + 1..Integer.MAX_VALUE -> 0.15f
+            in 1001..RENDER_MARKER_MAX_DISTANCE -> 0.45f
+            in RENDER_MARKER_MAX_DISTANCE + 1..Integer.MAX_VALUE -> 0.45f
             else -> -1f
         }
     }
@@ -82,10 +76,13 @@ object AugmentedRealityLocationUtils {
         }
     }
 
-    fun showDistance(distance: Int): String {
+    fun showDistance(context: Context, distance: Int): String {
         return if (distance >= 1000)
-            String.format("%.2f", (distance.toDouble() / 1000)) + " km"
+            context.getString(
+                R.string.km_holder,
+                String.format("%.2f", (distance.toDouble() / 1000))
+            )
         else
-            "$distance m"
+            context.getString(R.string.meters_holder, distance.toString())
     }
 }

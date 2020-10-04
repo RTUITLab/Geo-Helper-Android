@@ -8,10 +8,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import com.google.ar.core.TrackingState
@@ -19,9 +17,12 @@ import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.UnavailableException
 import com.google.ar.sceneform.Node
 import com.google.ar.sceneform.rendering.ViewRenderable
-import com.rtuitlab.geohelper.AugmentedRealityLocationUtils.INITIAL_MARKER_SCALE_MODIFIER
-import com.rtuitlab.geohelper.AugmentedRealityLocationUtils.INVALID_MARKER_SCALE_MODIFIER
+import com.rtuitlab.geohelper.utils.AugmentedRealityLocationUtils.INITIAL_MARKER_SCALE_MODIFIER
+import com.rtuitlab.geohelper.utils.AugmentedRealityLocationUtils.INVALID_MARKER_SCALE_MODIFIER
 import com.rtuitlab.geohelper.models.Place
+import com.rtuitlab.geohelper.utils.AugmentedRealityLocationUtils
+import com.rtuitlab.geohelper.utils.hasPermissions
+import com.rtuitlab.geohelper.utils.showDialogOK
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.view_place_label.view.*
 import uk.co.appoly.arcorelocation.LocationMarker
@@ -29,12 +30,9 @@ import uk.co.appoly.arcorelocation.LocationScene
 import uk.co.appoly.arcorelocation.sensor.DeviceLocationChanged
 import java.util.concurrent.CompletableFuture
 
-
 class MainActivity : AppCompatActivity() {
 
 	companion object {
-		const val LOG_TAG = "GeoHelperLogs"
-
 		const val REQUEST_ID_MULTIPLE_PERMISSIONS = 1
 		val PERMISSIONS = arrayOf(
 			Manifest.permission.ACCESS_FINE_LOCATION,
@@ -70,11 +68,9 @@ class MainActivity : AppCompatActivity() {
 			processPlaces(it)
 		})
 
-		isPermissionsGranted = if (hasPermissions(*PERMISSIONS)) {
-			true
-		} else {
+		isPermissionsGranted = hasPermissions(*PERMISSIONS)
+		if (!isPermissionsGranted) {
 			ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_ID_MULTIPLE_PERMISSIONS)
-			false
 		}
 	}
 
@@ -84,19 +80,21 @@ class MainActivity : AppCompatActivity() {
 		grantResults: IntArray
 	) {
 		if (requestCode == REQUEST_ID_MULTIPLE_PERMISSIONS) {
-			if (grantResults.all {
-					it == PackageManager.PERMISSION_GRANTED
-				}) {
+			if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
 				isPermissionsGranted = true
 			} else {
 				if (PERMISSIONS.any {
 						ActivityCompat.shouldShowRequestPermissionRationale(this, it)
 					}) {
-					showDialogOK("Camera and Location Services Permission required for this app",
+					showDialogOK(
+						getString(R.string.permissions_required),
 						DialogInterface.OnClickListener { _, which ->
 							when (which) {
 								DialogInterface.BUTTON_POSITIVE -> {
-									ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_ID_MULTIPLE_PERMISSIONS)
+									ActivityCompat.requestPermissions(
+										this,
+										PERMISSIONS, REQUEST_ID_MULTIPLE_PERMISSIONS
+									)
 								}
 								DialogInterface.BUTTON_NEGATIVE -> {
 									finish()
@@ -106,7 +104,7 @@ class MainActivity : AppCompatActivity() {
 				} else {
 					Toast.makeText(
 						this,
-						"Go to settings and enable permissions",
+						getString(R.string.setting_for_permissions),
 						Toast.LENGTH_LONG
 					).show()
 					finish()
@@ -129,6 +127,7 @@ class MainActivity : AppCompatActivity() {
 		}
 	}
 
+	// Pause AR when app is hided
 	private fun pauseARElements() {
 		arSceneView.session?.let {
 			locationScene?.pause()
@@ -136,44 +135,42 @@ class MainActivity : AppCompatActivity() {
 		}
 	}
 
+	// Setup AR session
 	private fun setupSession() {
-		if (arSceneView == null) {
-			return
-		}
-
-		if (arSceneView.session == null) {
+		arSceneView ?: return
+		arSceneView.session ?: run {
 			try {
-				val session = AugmentedRealityLocationUtils.setupSession(this, arCoreInstallRequested)
-				if (session == null) {
+				AugmentedRealityLocationUtils.setupSession(this, arCoreInstallRequested)?.let {
+					arSceneView.setupSession(it)
+				} ?: run {
 					arCoreInstallRequested = true
 					return
-				} else {
-					arSceneView.setupSession(session)
 				}
 			} catch (e: UnavailableException) {
 				AugmentedRealityLocationUtils.handleSessionException(this, e)
 			}
 		}
 
+		// Create new LocationScene if it was not created early
 		locationScene = locationScene ?: LocationScene(this, arSceneView).apply {
 			setMinimalRefreshing(true)
 			setOffsetOverlapping(true)
 			anchorRefreshInterval = 10000
 			locationChangedEvent = DeviceLocationChanged {
 				viewModel.currentLocation = it
-				coordinatesHolder.text = "${it.latitude} | ${it.longitude} | ${System.currentTimeMillis()}"
 			}
 		}
 
 		try {
 			resumeArElementsTask.run()
 		} catch (e: CameraNotAvailableException) {
-			Toast.makeText(this, "Unable to get camera", Toast.LENGTH_LONG).show()
+			Toast.makeText(this, getString(R.string.unable_camera), Toast.LENGTH_LONG).show()
 			finish()
 			return
 		}
 	}
 
+	// Process new places which were got from server
 	private fun processPlaces(places: List<Place>) {
 		areAllMarkersLoaded = false
 		locationScene?.clearMarkers()
@@ -182,6 +179,7 @@ class MainActivity : AppCompatActivity() {
 		updatePlacesMarkers()
 	}
 
+	// Setup new markers
 	private fun setupAndRenderPlacesMarkers(places: List<Place>) {
 		places.forEach { place ->
 			val completableFutureViewRenderable = ViewRenderable.builder()
@@ -190,10 +188,11 @@ class MainActivity : AppCompatActivity() {
 			CompletableFuture.anyOf(completableFutureViewRenderable)
 				.handle<Any> { _, throwable ->
 					//here we know the renderable was built or not
-					if (throwable != null) {
+					throwable?.let {
 						// handle renderable load fail
 						return@handle null
 					}
+
 					val placeMarker = LocationMarker(
 						place.position.lng,
 						place.position.lat,
@@ -213,6 +212,7 @@ class MainActivity : AppCompatActivity() {
 		}
 	}
 
+	// Set new node for marker
 	private fun setPlaceNode(place: Place, completableFuture: CompletableFuture<ViewRenderable>): Node {
 		val node = Node().apply {
 			renderable = completableFuture.get()
@@ -220,6 +220,7 @@ class MainActivity : AppCompatActivity() {
 
 		completableFuture.get().view.apply {
 			nameTV.text = place.name
+			descriptionTV.text = place.description
 			placeContainer.visibility = View.GONE
 			setOnTouchListener { _, _ ->
 				Toast.makeText(this@MainActivity, place.name, Toast.LENGTH_SHORT).show()
@@ -245,19 +246,21 @@ class MainActivity : AppCompatActivity() {
 			}
 		}
 		locationMarker.setRenderEvent { locationNode ->
-			layoutRenderable.distanceTV.text = AugmentedRealityLocationUtils.showDistance(locationNode.distance)
+			layoutRenderable.distanceTV.text = AugmentedRealityLocationUtils.showDistance(this, locationNode.distance)
 			resumeArElementsTask.run {
 				computeNewScaleModifierBasedOnDistance(locationMarker, locationNode.distance)
 			}
 		}
 	}
 
+	// Compute size of marker based on distance
 	private fun computeNewScaleModifierBasedOnDistance(locationMarker: LocationMarker, distance: Int) {
-		val scaleModifier = AugmentedRealityLocationUtils.getScaleModifierBasedOnRealDistance(distance)
-		return if (scaleModifier == INVALID_MARKER_SCALE_MODIFIER) {
+		return AugmentedRealityLocationUtils.getScaleModifierBasedOnRealDistance(distance).takeIf {
+			it != INVALID_MARKER_SCALE_MODIFIER
+		}?.let {
+			locationMarker.scaleModifier = it
+		} ?:run {
 			detachMarker(locationMarker)
-		} else {
-			locationMarker.scaleModifier = scaleModifier
 		}
 	}
 
@@ -282,7 +285,6 @@ class MainActivity : AppCompatActivity() {
 						locationMarker?.anchorNode?.distance ?: 0
 					)
 			}
-
 
 			val frame = arSceneView?.arFrame ?: return@addOnUpdateListener
 			if (frame.camera.trackingState != TrackingState.TRACKING) {

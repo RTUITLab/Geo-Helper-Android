@@ -1,18 +1,20 @@
 package com.rtuitlab.geohelper
 
 import android.location.Location
-import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.google.gson.Gson
-import com.google.gson.JsonSyntaxException
 import com.neovisionaries.ws.client.*
 import com.rtuitlab.geohelper.models.LatLng
 import com.rtuitlab.geohelper.models.Place
 import com.rtuitlab.geohelper.models.ServerResponse
 
 class MainViewModel: ViewModel() {
+
+    companion object {
+        const val API_URL = "wss://geo-helper.ga/api/v1/"
+    }
 
     var currentLocation: Location? = null
         set(value) {
@@ -21,18 +23,16 @@ class MainViewModel: ViewModel() {
         }
 
     private val webSocket = WebSocketFactory()
-        .createSocket("wss://geo-helper.ga/api/v1/").apply {
+        .createSocket(API_URL).apply {
             addListener(object : WebSocketAdapter() {
                 override fun onTextMessage(websocket: WebSocket?, text: String?) {
-                    Log.wtf("hey", "RESPONSE: $text")
-                    if (!text.isNullOrBlank() && !text.contains("message")) {
-                        val response = Gson().fromJson(text, ServerResponse::class.java)
-                        if (response.success) {
-                            Log.wtf("hey", "SUCCESS RESPONSE: $response")
-                            val newLocationData = response.data
-                            if (newLocationData != locationDataLiveData.value) {
-                                _locationDataLiveData.postValue(newLocationData)
-                            }
+                    text?.takeIf {
+                        !it.contains("message")
+                    }?.let { checkedText ->
+                        Gson().fromJson(checkedText, ServerResponse::class.java).takeIf { response ->
+                            response.success && response.data != locationDataLiveData.value
+                        }?.let { response ->
+                            _locationDataLiveData.postValue(response.data)
                         }
                     }
                 }
@@ -44,16 +44,14 @@ class MainViewModel: ViewModel() {
     val locationDataLiveData: LiveData<List<Place>> = _locationDataLiveData
 
     private fun checkNewLocationData() {
-        Log.wtf("hey", "checkNewLocationData")
-        currentLocation?.let {
-            if (webSocket.isOpen) {
-                Log.wtf("hey", "sendText")
-                webSocket.sendText(
-                    Gson().toJson(
-                        LatLng(it.latitude, it.longitude)
-                    )
+        currentLocation?.let { location ->
+            webSocket.takeIf {
+                it.isOpen
+            }?.sendText(
+                Gson().toJson(
+                    LatLng(location.latitude, location.longitude)
                 )
-            }
+            )
         }
     }
 
