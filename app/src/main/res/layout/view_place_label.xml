@@ -3,29 +3,47 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/placeContainer"
-    android:layout_width="100dp"
+    android:layout_width="150dp"
     android:layout_height="wrap_content"
-    android:background="@drawable/ic_launcher_background"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="4dp"
+    android:background="@drawable/marker_bg">
 
     <TextView
         android:id="@+id/nameTV"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
         android:layout_gravity="center_horizontal"
-        android:paddingHorizontal="8dp"
-        style="@style/TextAppearance.AppCompat.Headline"
-        tools:text="Name" />
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textColor="@android:color/black"
+        android:textSize="16sp"
+        tools:text="NameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameNameм" />
+
+    <TextView
+        android:id="@+id/descriptionTV"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="start"
+        android:layout_gravity="start"
+        android:maxLines="5"
+        android:ellipsize="end"
+        android:textColor="@android:color/black"
+        android:textSize="13sp"
+        android:layout_marginTop="4dp"
+        tools:text="DescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescriptionDescription" />
 
     <TextView
         android:id="@+id/distanceTV"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        android:layout_gravity="center_horizontal"
-        android:paddingHorizontal="8dp"
-        android:textSize="20sp"
-        tools:text="Name" />
+        android:gravity="end"
+        android:layout_gravity="end"
+        android:textSize="12sp"
+        android:maxLines="1"
+        android:layout_marginTop="4dp"
+        tools:text="Distance" />
 
 </LinearLayout>
