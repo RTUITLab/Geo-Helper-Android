@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -61,6 +62,10 @@ class MainActivity : AppCompatActivity() {
 	private var isPermissionsGranted = false
 
 	override fun onCreate(savedInstanceState: Bundle?) {
+		window.setFlags(
+			WindowManager.LayoutParams.FLAG_FULLSCREEN,
+			WindowManager.LayoutParams.FLAG_FULLSCREEN
+		)
 		super.onCreate(savedInstanceState)
 		setContentView(R.layout.activity_main)
 
@@ -96,9 +101,7 @@ class MainActivity : AppCompatActivity() {
 										PERMISSIONS, REQUEST_ID_MULTIPLE_PERMISSIONS
 									)
 								}
-								DialogInterface.BUTTON_NEGATIVE -> {
-									finish()
-								}
+								DialogInterface.BUTTON_NEGATIVE -> finish()
 							}
 						})
 				} else {
@@ -255,7 +258,7 @@ class MainActivity : AppCompatActivity() {
 
 	// Compute size of marker based on distance
 	private fun computeNewScaleModifierBasedOnDistance(locationMarker: LocationMarker, distance: Int) {
-		return AugmentedRealityLocationUtils.getScaleModifierBasedOnRealDistance(distance).takeIf {
+		AugmentedRealityLocationUtils.getScaleModifierBasedOnRealDistance(distance).takeIf {
 			it != INVALID_MARKER_SCALE_MODIFIER
 		}?.let {
 			locationMarker.scaleModifier = it
