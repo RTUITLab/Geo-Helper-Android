@@ -13,7 +13,7 @@ Android app for [GeoHelper](https://geohelper.rtuitlab.dev) –– the service f
 * The project can be built with Android Studio 4.1+
 
 ## How to start
-By default, app use `wss://geohelper.rtuitlab.dev/api` as API URL. If you want to use your own API URL you need to provide it in the [`gradle.properties`](gradle.properties#L23) file like so:
+By default, app use `wss://geohelper.rtuitlab.dev/api/test` as API URL. If you want to use your own API URL you need to provide it in the [`gradle.properties`](gradle.properties#L23) file like so:
 ```groovy
 api.url="your_url_here"
 ```
