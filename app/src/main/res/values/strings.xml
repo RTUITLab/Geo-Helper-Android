@@ -1,3 +1,8 @@
 <resources>
-    <string name="app_name">GeoHelper</string>
+    <string name="app_name" translatable="false">GeoHelper</string>
+    <string name="meters_holder">%1$s m</string>
+    <string name="km_holder">" %1$s km"</string>
+    <string name="setting_for_permissions">Go to settings and enable permissions</string>
+    <string name="permissions_required">Camera and Location Services Permission required for this app</string>
+    <string name="unable_camera">Unable to get camera</string>
 </resources>
