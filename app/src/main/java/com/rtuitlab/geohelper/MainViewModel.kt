@@ -13,7 +13,7 @@ import com.rtuitlab.geohelper.models.ServerResponse
 class MainViewModel: ViewModel() {
 
     companion object {
-        const val API_URL = "wss://geo-helper.ga/api/v1/"
+        val API_URL: String = BuildConfig.API_URL
     }
 
     var currentLocation: Location? = null
