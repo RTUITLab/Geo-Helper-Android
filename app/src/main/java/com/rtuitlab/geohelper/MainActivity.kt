@@ -1,202 +1,299 @@
 package com.rtuitlab.geohelper
 
 import android.Manifest
+import android.content.DialogInterface
 import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationManager
 import android.os.Bundle
-import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import android.view.View
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
-import com.google.ar.core.*
-import com.google.ar.sceneform.AnchorNode
-import com.google.ar.sceneform.FrameTime
-import com.google.ar.sceneform.Scene
-import com.google.ar.sceneform.math.Vector3
+import com.google.ar.core.TrackingState
+import com.google.ar.core.exceptions.CameraNotAvailableException
+import com.google.ar.core.exceptions.UnavailableException
+import com.google.ar.sceneform.Node
 import com.google.ar.sceneform.rendering.ViewRenderable
-import com.google.ar.sceneform.ux.ArFragment
-import com.google.ar.sceneform.ux.TransformableNode
-import com.rtuitlab.geohelper.models.LocationData
+import com.rtuitlab.geohelper.utils.AugmentedRealityLocationUtils.INITIAL_MARKER_SCALE_MODIFIER
+import com.rtuitlab.geohelper.utils.AugmentedRealityLocationUtils.INVALID_MARKER_SCALE_MODIFIER
+import com.rtuitlab.geohelper.models.Place
+import com.rtuitlab.geohelper.utils.AugmentedRealityLocationUtils
+import com.rtuitlab.geohelper.utils.hasPermissions
+import com.rtuitlab.geohelper.utils.showDialogOK
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.view_place_label.view.*
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
+import uk.co.appoly.arcorelocation.LocationMarker
+import uk.co.appoly.arcorelocation.LocationScene
+import uk.co.appoly.arcorelocation.sensor.DeviceLocationChanged
+import java.util.concurrent.CompletableFuture
 
-
-class MainActivity : AppCompatActivity(), Scene.OnUpdateListener {
+class MainActivity : AppCompatActivity() {
 
 	companion object {
-		const val LOG_TAG = "GeoHelperLogs"
-	}
-
-	private val arFragment by lazy {
-		supportFragmentManager.findFragmentById(R.id.arFragment) as ArFragment
-	}
-
-	private val frame: Frame? by lazy {
-		arFragment.arSceneView.arFrame
-	}
-
-	private val scene: Scene by lazy {
-		arFragment.arSceneView.scene
+		const val REQUEST_ID_MULTIPLE_PERMISSIONS = 1
+		val PERMISSIONS = arrayOf(
+			Manifest.permission.ACCESS_FINE_LOCATION,
+			Manifest.permission.CAMERA,
+			Manifest.permission.ACCESS_COARSE_LOCATION
+		)
 	}
 
 	private val viewModel: MainViewModel by lazy {
 		ViewModelProvider(this).get(MainViewModel::class.java)
 	}
 
+	private var locationScene: LocationScene? = null
+
+	private val arHandler = Handler(Looper.getMainLooper())
+
+	private var areAllMarkersLoaded = false
+
+	private var arCoreInstallRequested = false
+
+	private val resumeArElementsTask = Runnable {
+		locationScene?.resume()
+		arSceneView.resume()
+	}
+
+	private var isPermissionsGranted = false
+
 	override fun onCreate(savedInstanceState: Bundle?) {
+		window.setFlags(
+			WindowManager.LayoutParams.FLAG_FULLSCREEN,
+			WindowManager.LayoutParams.FLAG_FULLSCREEN
+		)
 		super.onCreate(savedInstanceState)
 		setContentView(R.layout.activity_main)
 
-		setupLocationListener()
-		arFragment.arSceneView.scene.addOnUpdateListener(this)
-
 		viewModel.locationDataLiveData.observe(this, Observer {
-			processLocationData(it)
+			processPlaces(it)
 		})
 
-		updateBtn.setOnClickListener {
-			val locationData = viewModel.locationDataLiveData.value
-			locationData?.let {
-				processLocationData(it)
-			} ?:run {
-				Toast.makeText(this@MainActivity, "Not ready!", Toast.LENGTH_SHORT).show()
+		isPermissionsGranted = hasPermissions(*PERMISSIONS)
+		if (!isPermissionsGranted) {
+			ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_ID_MULTIPLE_PERMISSIONS)
+		}
+	}
+
+	override fun onRequestPermissionsResult(
+		requestCode: Int,
+		permissions: Array<out String>,
+		grantResults: IntArray
+	) {
+		if (requestCode == REQUEST_ID_MULTIPLE_PERMISSIONS) {
+			if (grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+				isPermissionsGranted = true
+			} else {
+				if (PERMISSIONS.any {
+						ActivityCompat.shouldShowRequestPermissionRationale(this, it)
+					}) {
+					showDialogOK(
+						getString(R.string.permissions_required),
+						DialogInterface.OnClickListener { _, which ->
+							when (which) {
+								DialogInterface.BUTTON_POSITIVE -> {
+									ActivityCompat.requestPermissions(
+										this,
+										PERMISSIONS, REQUEST_ID_MULTIPLE_PERMISSIONS
+									)
+								}
+								DialogInterface.BUTTON_NEGATIVE -> finish()
+							}
+						})
+				} else {
+					Toast.makeText(
+						this,
+						getString(R.string.setting_for_permissions),
+						Toast.LENGTH_LONG
+					).show()
+					finish()
+				}
 			}
 		}
 	}
 
-//	override fun onResume() {
-//		super.onResume()
-//		azimuthManager.startSensor()
-//	}
-//
-//	override fun onPause() {
-//		super.onPause()
-//		azimuthManager.stopSensor()
-//	}
+	override fun onResume() {
+		super.onResume()
+		if (isPermissionsGranted) {
+			setupSession()
+		}
+	}
 
-	private fun setupLocationListener() {
-		if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-			Log.e(LOG_TAG, "PERMISSIONS NOT GRANTED")
+	override fun onPause() {
+		super.onPause()
+		if (isPermissionsGranted) {
+			pauseARElements()
+		}
+	}
+
+	// Pause AR when app is hided
+	private fun pauseARElements() {
+		arSceneView.session?.let {
+			locationScene?.pause()
+			arSceneView?.pause()
+		}
+	}
+
+	// Setup AR session
+	private fun setupSession() {
+		arSceneView ?: return
+		arSceneView.session ?: run {
+			try {
+				AugmentedRealityLocationUtils.setupSession(this, arCoreInstallRequested)?.let {
+					arSceneView.setupSession(it)
+				} ?: run {
+					arCoreInstallRequested = true
+					return
+				}
+			} catch (e: UnavailableException) {
+				AugmentedRealityLocationUtils.handleSessionException(this, e)
+			}
+		}
+
+		// Create new LocationScene if it was not created early
+		locationScene = locationScene ?: LocationScene(this, arSceneView).apply {
+			setMinimalRefreshing(true)
+			setOffsetOverlapping(true)
+			anchorRefreshInterval = 10000
+			locationChangedEvent = DeviceLocationChanged {
+				viewModel.currentLocation = it
+			}
+		}
+
+		try {
+			resumeArElementsTask.run()
+		} catch (e: CameraNotAvailableException) {
+			Toast.makeText(this, getString(R.string.unable_camera), Toast.LENGTH_LONG).show()
+			finish()
 			return
 		}
-		getSystemService(LocationManager::class.java)?.apply {
-			requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 1F, object : ChangeLocationListener() {
-				override fun onLocationChanged(location: Location?) {
-					viewModel.currentLocation = location
-					Toast.makeText(
-						this@MainActivity,
-						"Location changed",
-						Toast.LENGTH_SHORT
-					).show()
-				}
-			})
-		}
 	}
 
-	private fun processLocationData(locationData: LocationData) {
+	// Process new places which were got from server
+	private fun processPlaces(places: List<Place>) {
+		areAllMarkersLoaded = false
+		locationScene?.clearMarkers()
 
-		locationData.places.forEach {
-			val degree = it.bearingFrom(locationData.location.toLatLng())
-			val distant = 3.0
-
-			val y = 0F
-			val x = (distant * cos(PI * degree / 180)).toFloat()
-			val z = (-distant * sin(PI * degree / 180)).toFloat()
-			addPointByXYZ(-z, y, -x, "${it.name}\nDegree: $degree\nX,Y,Z: $x, $y, $z")
-//			addPointByXYZ(x, y, z, "${it.name}\nDegree: $degree\nX,Y,Z: $x, $y, $z")
-		}
+		setupAndRenderPlacesMarkers(places)
+		updatePlacesMarkers()
 	}
 
-	private fun addPointByXYZ(x: Float, y: Float, z: Float, name: String) {
-		ViewRenderable.builder().setView(this, R.layout.view_place_label).build().thenAccept {
-			it.view.labelTV.text = name
-
-			val node = PlaceNode().apply {
-				renderable = it
-			}
-			arFragment.arSceneView.scene.addChild(node)
-			node.worldPosition = Vector3(x, y, z)
-		}
-	}
-
-	override fun onUpdate(frameTime: FrameTime?) {
-		frame?.let {
-			for (o in it.getUpdatedTrackables(Plane::class.java)) {
-				val plane = o as Plane
-				if (plane.trackingState === TrackingState.TRACKING) {
-					arFragment.planeDiscoveryController.hide()
-					val iterableAnchor = it.updatedAnchors.iterator()
-					if (!iterableAnchor.hasNext()) {
-						makeAr(plane, it)
+	// Setup new markers
+	private fun setupAndRenderPlacesMarkers(places: List<Place>) {
+		places.forEach { place ->
+			val completableFutureViewRenderable = ViewRenderable.builder()
+				.setView(this, R.layout.view_place_label)
+				.build()
+			CompletableFuture.anyOf(completableFutureViewRenderable)
+				.handle<Any> { _, throwable ->
+					//here we know the renderable was built or not
+					throwable?.let {
+						// handle renderable load fail
+						return@handle null
 					}
+
+					val placeMarker = LocationMarker(
+						place.position.lng,
+						place.position.lat,
+						setPlaceNode(place, completableFutureViewRenderable)
+					)
+					arHandler.postDelayed({
+						attachMarkerToScene(
+							placeMarker,
+							completableFutureViewRenderable.get().view
+						)
+						if (places.indexOf(place) == places.size - 1) {
+							areAllMarkersLoaded = true
+						}
+					}, 200)
+					null
 				}
+		}
+	}
+
+	// Set new node for marker
+	private fun setPlaceNode(place: Place, completableFuture: CompletableFuture<ViewRenderable>): Node {
+		val node = Node().apply {
+			renderable = completableFuture.get()
+		}
+
+		completableFuture.get().view.apply {
+			nameTV.text = place.name
+			descriptionTV.text = place.description
+			placeContainer.visibility = View.GONE
+			setOnTouchListener { _, _ ->
+				Toast.makeText(this@MainActivity, place.name, Toast.LENGTH_SHORT).show()
+				performClick()
+				false
+			}
+		}
+
+		return node
+	}
+
+	private fun attachMarkerToScene(locationMarker: LocationMarker, layoutRenderable: View) {
+		resumeArElementsTask.run {
+			locationMarker.scalingMode = LocationMarker.ScalingMode.FIXED_SIZE_ON_SCREEN
+			locationMarker.scaleModifier = INITIAL_MARKER_SCALE_MODIFIER
+
+			locationScene?.mLocationMarkers?.add(locationMarker)
+			locationMarker.anchorNode?.isEnabled = true
+
+			arHandler.post {
+				locationScene?.refreshAnchors()
+				layoutRenderable.placeContainer.visibility = View.VISIBLE
+			}
+		}
+		locationMarker.setRenderEvent { locationNode ->
+			layoutRenderable.distanceTV.text = AugmentedRealityLocationUtils.showDistance(this, locationNode.distance)
+			resumeArElementsTask.run {
+				computeNewScaleModifierBasedOnDistance(locationMarker, locationNode.distance)
 			}
 		}
 	}
 
-	fun makeAr(plane: Plane, frame: Frame) {
-		for (k in 0..9) {
-			if (this.degree >= 160 && this.degree <= 170) {
-				Toast.makeText(this, "walk", Toast.LENGTH_SHORT).show()
-				val hitTest: List<HitResult> = frame.hitTest(screenCenter().x, screenCenter().y)
-				val hitTestIterator = hitTest.iterator()
-				while (hitTestIterator.hasNext()) {
-					val hitResult: HitResult = hitTestIterator.next()
-					modelAnchor = null
-					modelAnchor = plane.createAnchor(hitResult.hitPose)
-					val anchorNode =
-						AnchorNode(modelAnchor)
-					anchorNode.setParent(scene)
-					val transformableNode =
-						TransformableNode(arFragment.transformationSystem)
-					transformableNode.setParent(anchorNode)
-					transformableNode.renderable = this@MainActivity.andyRenderable
-					val x: Float = modelAnchor.getPose().tx()
-					val y: Float = modelAnchor.getPose().compose(Pose.makeTranslation(0f, 0f, 0f)).ty()
-					transformableNode.worldPosition = Vector3(x, y, (-k).toFloat())
-				}
-			}
+	// Compute size of marker based on distance
+	private fun computeNewScaleModifierBasedOnDistance(locationMarker: LocationMarker, distance: Int) {
+		AugmentedRealityLocationUtils.getScaleModifierBasedOnRealDistance(distance).takeIf {
+			it != INVALID_MARKER_SCALE_MODIFIER
+		}?.let {
+			locationMarker.scaleModifier = it
+		} ?:run {
+			detachMarker(locationMarker)
 		}
 	}
 
-	private fun screenCenter(): Vector3 {
-		val vw: View = findViewById(android.R.id.content)
-		return Vector3(vw.width / 2f, vw.height / 2f, 0f)
+	private fun detachMarker(locationMarker: LocationMarker) {
+		with(locationMarker) {
+			anchorNode?.anchor?.detach()
+			anchorNode?.isEnabled = false
+			anchorNode = null
+		}
 	}
 
-//	private fun addPointByXYZ(x: Float, y: Float, z: Float, name: String) {
-//		ViewRenderable
-//			.builder()
-//			.setView(this, R.layout.view_place_label)
-//			.build()
-//			.thenAccept { viewRenderable ->
-//				viewRenderable.view.labelTV.text = name
-//
-//				anchorNode?.addChild(
-//					PlaceNode().apply {
-//						renderable = viewRenderable
-//						worldPosition = Vector3(x, y, z)
-//					}
-//				)
-//
-////				val node = PlaceNode()
-////				node.renderable = it
-////				scene.addChild(node)
-////				node.worldPosition = Vector3(x, y, z)
-//
-////				val cameraPosition = scene.camera.worldPosition
-////				val direction = Vector3.subtract(cameraPosition, node.worldPosition)
-////				val lookRotation = Quaternion.lookRotation(direction, Vector3.up())
-////				node.worldRotation = lookRotation
-//
-////				scene.addChild(node)
-//			}
-//	}
+	private fun updatePlacesMarkers() {
+		arSceneView.scene.addOnUpdateListener()
+		{
+			if (!areAllMarkersLoaded) {
+				return@addOnUpdateListener
+			}
+
+			locationScene?.mLocationMarkers?.forEach { locationMarker ->
+				locationMarker.height =
+					AugmentedRealityLocationUtils.generateRandomHeightBasedOnDistance(
+						locationMarker?.anchorNode?.distance ?: 0
+					)
+			}
+
+			val frame = arSceneView?.arFrame ?: return@addOnUpdateListener
+			if (frame.camera.trackingState != TrackingState.TRACKING) {
+				return@addOnUpdateListener
+			}
+			locationScene!!.processFrame(frame)
+		}
+	}
 }

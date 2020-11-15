@@ -7,17 +7,10 @@
     android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <fragment
-        android:name="com.google.ar.sceneform.ux.ArFragment"
-        android:id="@+id/arFragment"
+    <com.google.ar.sceneform.ArSceneView
+        android:id="@+id/arSceneView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-    <Button
-        android:id="@+id/updateBtn"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="8dp"/>
+        android:layout_height="match_parent"
+        android:layout_gravity="top"/>
 
 </FrameLayout>

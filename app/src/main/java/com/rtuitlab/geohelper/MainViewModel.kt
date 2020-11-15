@@ -1,22 +1,19 @@
 package com.rtuitlab.geohelper
 
 import android.location.Location
-import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import com.google.gson.Gson
-import com.neovisionaries.ws.client.WebSocket
-import com.neovisionaries.ws.client.WebSocketAdapter
-import com.neovisionaries.ws.client.WebSocketFactory
+import com.neovisionaries.ws.client.*
 import com.rtuitlab.geohelper.models.LatLng
-import com.rtuitlab.geohelper.models.LocationData
+import com.rtuitlab.geohelper.models.Place
 import com.rtuitlab.geohelper.models.ServerResponse
 
 class MainViewModel: ViewModel() {
 
     companion object {
-        private const val SERVER_URL = "wss://geo-helper.herokuapp.com/"
+        const val API_URL = BuildConfig.API_URL
     }
 
     var currentLocation: Location? = null
@@ -26,19 +23,16 @@ class MainViewModel: ViewModel() {
         }
 
     private val webSocket = WebSocketFactory()
-        .createSocket(SERVER_URL).apply {
+        .createSocket(API_URL).apply {
             addListener(object : WebSocketAdapter() {
                 override fun onTextMessage(websocket: WebSocket?, text: String?) {
-                    Log.wtf("hey", "RESPONSE: $text")
-                    if (!text.isNullOrBlank() && !text.contains("message")) {
-                        val response = Gson().fromJson(text, ServerResponse::class.java)
-                        if (response.success) {
-                            _locationDataLiveData.postValue(
-                                LocationData(
-                                    currentLocation!!,
-                                    response.data
-                                )
-                            )
+                    text?.takeIf {
+                        !it.contains("message")
+                    }?.let { checkedText ->
+                        Gson().fromJson(checkedText, ServerResponse::class.java).takeIf { response ->
+                            response.success && response.data != locationDataLiveData.value
+                        }?.let { response ->
+                            _locationDataLiveData.postValue(response.data)
                         }
                     }
                 }
@@ -46,18 +40,18 @@ class MainViewModel: ViewModel() {
             connectAsynchronously()
         }
 
-    private val _locationDataLiveData = MutableLiveData<LocationData>()
-    val locationDataLiveData: LiveData<LocationData> = _locationDataLiveData
+    private val _locationDataLiveData = MutableLiveData<List<Place>>()
+    val locationDataLiveData: LiveData<List<Place>> = _locationDataLiveData
 
     private fun checkNewLocationData() {
-        currentLocation?.let {
-            if (webSocket.isOpen) {
-                webSocket.sendText(
-                    Gson().toJson(
-                        LatLng(it.latitude, it.longitude)
-                    )
+        currentLocation?.let { location ->
+            webSocket.takeIf {
+                it.isOpen
+            }?.sendText(
+                Gson().toJson(
+                    LatLng(location.latitude, location.longitude)
                 )
-            }
+            )
         }
     }
 

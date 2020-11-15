@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="meters_holder">" %1$s м"</string>
+    <string name="km_holder">" %1$s км"</string>
+    <string name="setting_for_permissions">Зайдите в найстройке и дайте разрешения</string>
+    <string name="permissions_required">Разрешения камеры и местоположения необходимы для этого приложения</string>
+    <string name="unable_camera">Невозможно получить доступ к камере</string>
+</resources>
